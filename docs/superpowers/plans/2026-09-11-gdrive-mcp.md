@@ -1137,7 +1137,7 @@ export function createHttpApp(makeServer: () => McpServer, config: Config): expr
       }
       await transport.handleRequest(req, res, req.body);
     } catch (err) {
-      res.status(500).json({ error: String((err as Error)?.message ?? err) });
+      sendInternalError(res, err);
     }
   });
 
@@ -1201,7 +1201,7 @@ git add src/transport.ts src/server.ts src/main.ts src/tools/common.ts tests/hel
 Tool contracts:
 - `drive_search { q: string, pageSize?: number (1-100, default 20), pageToken?: string, driveId?: string, orderBy?: string }` → `{ files, nextPageToken? }` via `drive.listFiles({ q, pageSize, pageToken, orderBy, driveId })`.
 - `drive_list { folderId?: string, pageSize?: number, pageToken?: string, orderBy?: string }` → builds `q = '<escaped>' in parents` (`'root' in parents` when omitted) via `drive.listFiles`.
-- `drive_read { fileId: string, offset?: number (default 0), length?: number (default inlineLimitBytes) }` → `getFile` meta; if workspace mime: `autoExportMime` null → return `{ metadata, exportRequired: true, supportedExports: allowedExportMimes(mime) }`; else `exportFile(auto)` → `{ metadata, exportedFrom, exportMime, text }` (exported bytes assumed UTF-8 text; binary Workspace exports like pdf/png → base64 via `toInlinePayload(bytes, exportMime, 0, limit)`); non-workspace → `downloadFile` → `toInlinePayload(bytes, mimeType, offset, length)` merged with `{ metadata }`.
+- `drive_read { fileId: string, offset?: number (default 0), length?: number (default inlineLimitBytes) }` → `getFile` meta; if workspace mime: `autoExportMime` null → return `{ metadata, exportRequired: true, supportedExports: allowedExportMimes(mime) }`; else `exportFile(auto)` → `{ metadata, exportedFrom, exportMime, text }` (exported bytes assumed UTF-8 text; binary Workspace exports like pdf/png → base64 via `toInlinePayload(bytes, auto, args.offset, limit)`); non-workspace → `downloadFile` → `toInlinePayload(bytes, mimeType, offset, length)` merged with `{ metadata }`.
 - `drive_export { fileId: string, mimeType: string }` → `getFile` meta; reject non-workspace with `INVALID_REQUEST`; reject disallowed mime with `INVALID_REQUEST` listing `allowedExportMimes`; else `exportFile` → text if TEXTISH else base64 (no truncation; full buffer).
 
 - [ ] **Step 1: Write the failing test** (via in-memory MCP client)
@@ -1292,7 +1292,7 @@ export function registerReadTools(server: McpServer, deps: ServerDeps): void {
     }));
 
   server.tool('drive_read', 'Read file content; Workspace files auto-export; large content truncates with nextOffset',
-    { fileId: z.string(), offset: z.number().int().min(0).default(0), length: z.number().int().min(1).optional() }, async (args) =>
+    { fileId: z.string(), offset: z.number().int().min(0).default(0), length: z.number().int().min(1).max(deps.config.inlineLimitBytes).optional() }, async (args) =>
     handleTool(async () => {
       const limit = args.length ?? deps.config.inlineLimitBytes;
       const metadata = await deps.drive.getFile(args.fileId);

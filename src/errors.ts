@@ -15,10 +15,34 @@ export class DriveError extends Error {
 
 const SECRET_PATTERNS = [/AIza[0-9A-Za-z_-]{10,}/g, /ya29\.[0-9A-Za-z_-]+/g, /1\/\/[0-9A-Za-z_-]+/g];
 
+const SCRUB_LABELS =
+  'client[_-]?secret|clientSecret|refresh[_-]?token|refreshToken|access[_-]?token|accessToken|id[_-]?token|idToken|api[_-]?key|apiKey|private[_-]?key|privateKey|authorization|bearer[_-]?token';
+
+const SCRUB_PATTERNS: RegExp[] = [
+  /Bearer\s+[A-Za-z0-9._~+/-]{6,}/gi,
+  /\bBearer[\s:]+[A-Za-z0-9._~+/-]{4,}=*/gi,
+  /-----BEGIN [^-]*PRIVATE KEY-----[\s\S]+?-----END[^-]*PRIVATE KEY-----/g,
+  /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,
+  /\bGOCSPX-[A-Za-z0-9_-]+/g,
+  /\bGOCSF-[A-Za-z0-9_-]+/g,
+  ...SECRET_PATTERNS,
+  /=((?:[A-Za-z0-9_.\-/+]){12,})/g,
+];
+
 export function scrub(message: string): string {
-  let out = message;
-  for (const re of SECRET_PATTERNS) out = out.replace(re, '[REDACTED]');
-  out = out.replace(/=((?:[A-Za-z0-9_.\-/+]){12,})/g, '=[REDACTED]');
+  let out = message.replace(/&#x3[dD];|%3[Dd]/g, '=');
+  out = SCRUB_PATTERNS.reduce<string>(
+    (acc, re) =>
+      acc.replace(re, (m) =>
+        m.toLowerCase().startsWith('bearer') ? 'Bearer [REDACTED]' : m.startsWith('=') ? '=[REDACTED]' : '[REDACTED]',
+      ),
+    out,
+  );
+  // The two $1-preserving patterns stay as special cases: they keep the
+  // label name ($1) and only redact the value, so they cannot use the
+  // uniform replacement in the table above.
+  out = out.replace(new RegExp(`(${SCRUB_LABELS})\\s*[:=]\\s*["']?[^"'\\s,}]+`, 'gi'), '$1=[REDACTED]');
+  out = out.replace(new RegExp(`["'](${SCRUB_LABELS})["']\\s*:\\s*["'][^"']*["']`, 'gi'), '"$1":"[REDACTED]"');
   return out;
 }
 

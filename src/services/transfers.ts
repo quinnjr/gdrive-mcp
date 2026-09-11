@@ -8,6 +8,11 @@ export function selectUploadMode(byteLength: number): 'single' | 'resumable' {
   return byteLength > UPLOAD_RESUMABLE_BYTES ? 'resumable' : 'single';
 }
 
+/**
+ * Decode tool-provided upload content.
+ * Buffer.from(x,'base64') silently truncates unpadded input, so padding is validated here to fail fast.
+ * Callers/tools must send padded base64.
+ */
 export function decodeToolContent(input: { contentText?: string; contentBase64?: string }): { bytes: Buffer; isBase64: boolean } {
   const { contentText, contentBase64 } = input;
   if (contentText !== undefined && contentBase64 !== undefined) {

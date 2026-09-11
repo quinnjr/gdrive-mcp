@@ -1,10 +1,11 @@
 import { Readable } from 'node:stream';
 import type { drive_v3 } from 'googleapis';
 import type { AuthProvider } from '../auth.js';
-import { isRetryableStatus, mapDriveError } from '../errors.js';
+import { isRetryableStatus, mapDriveError, DriveError } from '../errors.js';
 
 export const DEFAULT_FILE_FIELDS = 'id,name,mimeType,size,modifiedTime,parents,trashed,owners,webViewLink';
 export const FOLDER_MIME = 'application/vnd.google-apps.folder';
+export const DEFAULT_MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024;
 
 export interface DriveFile { id: string; name?: string; mimeType?: string; [k: string]: unknown }
 export interface DriveClient {
@@ -70,7 +71,8 @@ function toBuffer(data: unknown): Buffer {
   return Buffer.from(data as Uint8Array);
 }
 
-export function createDriveClient(auth: AuthProvider): DriveClient {
+export function createDriveClient(auth: AuthProvider, opts?: { maxDownloadBytes?: number }): DriveClient {
+  const maxBytes = opts?.maxDownloadBytes ?? DEFAULT_MAX_DOWNLOAD_BYTES;
   const drive = (): Promise<drive_v3.Drive> => auth.getDrive();
   const run = <T>(fileId: string | undefined, fn: (d: drive_v3.Drive) => Promise<T>): Promise<T> =>
     withRetry(() => drive().then(fn)).catch((err) => { throw mapDriveError(err, fileId); });
@@ -99,12 +101,19 @@ export function createDriveClient(auth: AuthProvider): DriveClient {
     async downloadFile(fileId) {
       return run(fileId, async (d) => {
         const meta = (await d.files.get({ ...SD, fileId, fields: 'id,name,mimeType,size' })).data;
+        const size = meta.size !== undefined ? Number(meta.size) : undefined;
+        if (size !== undefined && Number.isFinite(size) && size > maxBytes) throw new DriveError('INVALID_REQUEST', `File size ${size} bytes exceeds download ceiling of ${maxBytes} bytes (DRIVE_MAX_DOWNLOAD_MB)`);
         const res = await d.files.get({ ...SD, fileId, alt: 'media' }, { responseType: 'arraybuffer' });
         return { bytes: toBuffer(res.data), mimeType: meta.mimeType ?? 'application/octet-stream', name: meta.name ?? undefined };
       });
     },
     async exportFile(fileId, mimeType) {
-      return run(fileId, async (d) => ({ bytes: toBuffer((await d.files.export({ ...SD, fileId, mimeType })).data) }));
+      return run(fileId, async (d) => {
+        const meta = (await d.files.get({ ...SD, fileId, fields: 'id,name,mimeType,size' })).data;
+        const size = meta.size !== undefined ? Number(meta.size) : undefined;
+        if (size !== undefined && Number.isFinite(size) && size > maxBytes) throw new DriveError('INVALID_REQUEST', `File size ${size} bytes exceeds download ceiling of ${maxBytes} bytes (DRIVE_MAX_DOWNLOAD_MB)`);
+        return { bytes: toBuffer((await d.files.export({ ...SD, fileId, mimeType })).data) };
+      });
     },
     async createFolder(name, parentId) {
       return run(undefined, async (d) => (await d.files.create({ ...SD, requestBody: { name, mimeType: FOLDER_MIME, parents: parentId ? [parentId] : undefined }, fields: DEFAULT_FILE_FIELDS })).data as DriveFile);

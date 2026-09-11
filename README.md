@@ -49,6 +49,8 @@ This starts the server on port 3000 (or `$PORT`). Endpoints:
 - `DELETE /mcp` — terminate the session.
 - `GET /healthz` — health check, returns `{"ok":true}`.
 
+Uncaught `/mcp` errors before response headers return scrubbed JSON `{error}` with 500 (all methods); after SSE headers start the stream is torn down.
+
 Connect MCP Inspector to `http://localhost:3000/mcp`.
 
 ## Docker
@@ -67,7 +69,7 @@ The image builds with `npm run build`, installs production dependencies only, an
 | `drive_search` | Pass-through Drive query; default `trashed=false`; returns `files[] + nextPageToken` |
 | `drive_get` | `files.get` metadata only |
 | `drive_list` | `q: '<folder> in parents and trashed=false'`; root if no folder |
-| `drive_read` | Metadata + content; Workspace files auto-exported; binary → base64 + `isBase64:true`; past inline cap → `truncated:true, nextOffset, totalSize` |
+| `drive_read` | Metadata + content; Workspace files auto-exported; binary → base64 + `isBase64:true`; past inline cap → `truncated:true, nextOffset, totalSize`; `length ≤ DRIVE_INLINE_LIMIT_MB (default 10 MiB); larger → invalid-params error`; Workspace auto-exports paginate like regular files (offset/length, truncated/nextOffset) |
 | `drive_export` | Explicit export; `mimeType` validated against allowed map for source type; returns the full buffer with no truncation (large PDFs can be big) |
 | `drive_create_folder` | `files.create` with folder MIME |
 | `drive_upload` | Small = single-shot; >5MB = resumable via `TransferHelper` |
@@ -85,6 +87,7 @@ The image builds with `npm run build`, installs production dependencies only, an
 - **Ownership transfer blocked.** `drive_permissions` rejects `role:owner` unless the call explicitly passes `allowOwnershipTransfer:true`.
 - **`API_KEY` required when set.** When `API_KEY` is set, all `/mcp` requests require `Authorization: Bearer <key>` (no localhost exemption).
 - Secrets (client secret, refresh token, API key) never appear in tool output or error messages.
+- Error messages are scrubbed; assert error codes/isError, not exact message text.
 
 ## Test
 

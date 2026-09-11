@@ -5,7 +5,7 @@ import type { Config } from './config.js';
 import { getConfig } from './config.js';
 import { AuthProvider } from './auth.js';
 import { createDriveClient } from './services/drive.js';
-import { createSessionStore, newSessionTransport } from './transport.js';
+import { createSessionStore, newSessionTransport, type SessionStore } from './transport.js';
 import { handleTool, type ServerDeps } from './tools/common.js';
 import { scrub } from './errors.js';
 import { registerReadTools } from './tools/read.js';
@@ -22,7 +22,14 @@ export function createMcpServer(deps: ServerDeps): McpServer {
   return server;
 }
 
-export function createHttpApp(makeServer: () => McpServer, config: Config): express.Express {
+function sendInternalError(res: express.Response, err: unknown): void {
+  let message = 'internal error';
+  try { message = scrub(String((err as Error)?.message ?? err)); } catch { /* keep fallback */ }
+  if (!res.headersSent && !res.writableEnded) res.status(500).json({ error: message });
+  else { try { res.end(); } catch { /* socket already gone */ } }
+}
+
+export function createHttpApp(makeServer: () => McpServer, config: Config, store: SessionStore = createSessionStore()): express.Express {
   const app = express();
   app.use(express.json({ limit: '25mb' }));
   if (config.corsOrigins.length > 0) {
@@ -38,39 +45,57 @@ export function createHttpApp(makeServer: () => McpServer, config: Config): expr
     res.status(401).json({ error: 'unauthorized' });
   });
 
-  const store = createSessionStore();
   const sessionIdOf = (req: express.Request): string | undefined => {
     const h = req.headers['mcp-session-id'];
     return Array.isArray(h) ? h[0] : h;
+  };
+
+  const sessionTransport = (req: express.Request, store: SessionStore) => {
+    const id = sessionIdOf(req);
+    return { id, transport: id ? store.transports.get(id) : undefined };
+  };
+
+  const sendKnownSessionError = (res: express.Response, status: 400 | 404): void => {
+    res.status(status).json({ error: 'unknown session' });
   };
 
   app.get('/healthz', (_req, res) => res.json({ ok: true }));
 
   app.post('/mcp', async (req, res) => {
     try {
-      let transport = sessionIdOf(req) ? store.transports.get(sessionIdOf(req) as string) : undefined;
+      let transport = sessionTransport(req, store).transport;
       if (!transport) {
         transport = newSessionTransport(store);
         await makeServer().connect(transport);
       }
       await transport.handleRequest(req, res, req.body);
     } catch (err) {
-      res.status(500).json({ error: scrub(String((err as Error)?.message ?? err)) });
+      sendInternalError(res, err);
     }
   });
 
   app.get('/mcp', async (req, res) => {
-    const transport = sessionIdOf(req) ? store.transports.get(sessionIdOf(req) as string) : undefined;
-    if (!transport) { res.status(400).json({ error: 'unknown session' }); return; }
-    await transport.handleRequest(req, res);
+    try {
+      const { transport } = sessionTransport(req, store);
+      if (!transport) { sendKnownSessionError(res, 400); return; }
+      await transport.handleRequest(req, res);
+    } catch (err) {
+      sendInternalError(res, err);
+    }
   });
 
   app.delete('/mcp', async (req, res) => {
-    const id = sessionIdOf(req);
-    const transport = id ? store.transports.get(id) : undefined;
-    if (!transport || !id) { res.status(404).json({ error: 'unknown session' }); return; }
-    await transport.handleRequest(req, res);
-    store.transports.delete(id);
+    try {
+      const { id, transport } = sessionTransport(req, store);
+      if (!transport || !id) { sendKnownSessionError(res, 404); return; }
+      try {
+        await transport.handleRequest(req, res);
+      } finally {
+        store.transports.delete(id);
+      }
+    } catch (err) {
+      sendInternalError(res, err);
+    }
   });
 
   return app;
@@ -79,7 +104,7 @@ export function createHttpApp(makeServer: () => McpServer, config: Config): expr
 export async function start(): Promise<void> {
   const config = getConfig();
   const auth = new AuthProvider(config);
-  const drive = createDriveClient(auth);
+  const drive = createDriveClient(auth, { maxDownloadBytes: config.maxDownloadBytes });
   const app = createHttpApp(() => createMcpServer({ config, auth, drive }), config);
   await new Promise<void>((resolve) => app.listen(config.port, () => resolve()));
   console.log(`gdrive-mcp listening on :${config.port}`);

@@ -1,9 +1,12 @@
 import type { Server } from 'node:http';
-import express from 'express';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { vi } from 'vitest';
+import { AuthProvider } from '../src/auth.js';
+import { getConfig, type Config } from '../src/config.js';
 import { DriveError } from '../src/errors.js';
 import type { DriveClient, DriveFile } from '../src/services/drive.js';
-import { createHttpApp } from '../src/server.js';
-import { createMcpServer } from '../src/server.js';
+import { createHttpApp, createMcpServer } from '../src/server.js';
 import type { ServerDeps } from '../src/tools/common.js';
 
 export const CANNED_FILE: DriveFile = { id: 'f1', name: 'a.txt', mimeType: 'text/plain' };
@@ -29,6 +32,25 @@ export function makeFakeDrive(overrides: Partial<DriveClient> = {}): DriveClient
     listDrives: async () => { calls.push('listDrives'); return { drives: [] }; },
   };
   return Object.assign({ ...base, ...overrides }, { calls });
+}
+
+export async function clientForToolTests(
+  overrides: Partial<DriveClient> = {},
+  configOverrides: Record<string, string> = {},
+): Promise<{ client: Client; drive: DriveClient & { calls: string[] }; config: Config }> {
+  const config = getConfig({ GOOGLE_CLIENT_ID: 'c', GOOGLE_CLIENT_SECRET: 's', GOOGLE_REFRESH_TOKEN: 'r', ...configOverrides });
+  const drive = makeFakeDrive(overrides);
+  const server = createMcpServer({ config, auth: new AuthProvider(config), drive });
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: 't', version: '0' });
+  await Promise.all([server.connect(st), client.connect(ct)]);
+  return { client, drive, config };
+}
+
+export const toolTextContent = (r: unknown): string => (r as { content: [{ text: string }] }).content[0].text;
+
+export function spyOnStdout() {
+  return vi.spyOn(process.stdout, 'write').mockImplementation(() => true as unknown as boolean);
 }
 
 export async function startTestApp(deps: ServerDeps): Promise<{ baseUrl: string; close(): Promise<void> }> {
