@@ -9,6 +9,7 @@ import { createSessionStore, newSessionTransport } from './transport.js';
 import { handleTool, type ServerDeps } from './tools/common.js';
 import { registerReadTools } from './tools/read.js';
 import { registerWriteTools } from './tools/write.js';
+import { registerSharingTools } from './tools/sharing.js';
 
 export function createMcpServer(deps: ServerDeps): McpServer {
   const server = new McpServer({ name: 'gdrive-mcp', version: '0.1.0' });
@@ -16,6 +17,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
     handleTool(() => deps.drive.getFile(args.fileId, args.fields)));
   registerReadTools(server, deps);
   registerWriteTools(server, deps);
+  registerSharingTools(server, deps);
   return server;
 }
 
