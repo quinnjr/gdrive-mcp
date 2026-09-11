@@ -1,0 +1,29 @@
+{
+  "name": "@quinnjr/gdrive-mcp",
+  "version": "0.1.0",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc",
+    "start": "node dist/src/main.js",
+    "test": "vitest run",
+    "test:integration": "vitest run tests/integration.drive.test.ts",
+    "typecheck": "tsc --noEmit",
+    "auth:setup": "tsx scripts/auth-setup.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "express": "^4.22.2",
+    "google-auth-library": "^11.0.2",
+    "googleapis": "^180.0.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.20.2",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
+  }
+}
