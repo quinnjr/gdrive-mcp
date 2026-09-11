@@ -7,11 +7,13 @@ import { AuthProvider } from './auth.js';
 import { createDriveClient } from './services/drive.js';
 import { createSessionStore, newSessionTransport } from './transport.js';
 import { handleTool, type ServerDeps } from './tools/common.js';
+import { registerReadTools } from './tools/read.js';
 
 export function createMcpServer(deps: ServerDeps): McpServer {
   const server = new McpServer({ name: 'gdrive-mcp', version: '0.1.0' });
   server.tool('drive_get', 'Get file metadata by ID', { fileId: z.string(), fields: z.string().optional() }, async (args) =>
     handleTool(() => deps.drive.getFile(args.fileId, args.fields)));
+  registerReadTools(server, deps);
   return server;
 }
 
