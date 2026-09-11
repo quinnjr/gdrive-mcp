@@ -24,4 +24,8 @@ describe('transfers', () => {
     expect(p).toMatchObject({ isBase64: true, truncated: false });
     expect(typeof p.dataBase64).toBe('string');
   });
+  it('inlines application/*+json suffix types as text', () => {
+    const p = toInlinePayload(Buffer.from('{"a":1}'), 'application/ld+json', 0, 1024);
+    expect(p).toMatchObject({ isBase64: false, truncated: false, text: '{"a":1}' });
+  });
 });

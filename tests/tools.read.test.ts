@@ -42,6 +42,15 @@ describe('read tools', () => {
     const res = await client.callTool({ name: 'drive_read', arguments: { fileId: 'big', offset: 0, length: 10 } });
     expect(JSON.parse(text(res))).toMatchObject({ truncated: true, nextOffset: 10, totalSize: 16, isBase64: true });
   });
+  it('drive_read truncates Workspace textish exports with nextOffset', async () => {
+    const buf = Buffer.from('abcdefghijklmnopqrstuvwxyz'); // 26 bytes
+    const client = await clientFor({
+      getFile: async (id: string) => ({ id, name: 'd', mimeType: 'application/vnd.google-apps.document' }),
+      exportFile: async () => ({ bytes: buf }),
+    });
+    const res = await client.callTool({ name: 'drive_read', arguments: { fileId: 'doc1', length: 10 } });
+    expect(JSON.parse(text(res))).toMatchObject({ truncated: true, nextOffset: 10, totalSize: 26, isBase64: false, text: 'abcdefghij' });
+  });
   it('drive_export rejects disallowed mime with isError', async () => {
     const client = await clientFor({
       getFile: async (id: string) => ({ id, name: 'd', mimeType: 'application/vnd.google-apps.document' }),

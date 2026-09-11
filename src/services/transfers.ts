@@ -2,7 +2,7 @@ import { DriveError } from '../errors.js';
 
 export const UPLOAD_RESUMABLE_BYTES = 5 * 1024 * 1024;
 
-export const TEXTISH_RE = /^(text\/.*|application\/(json|xml|javascript|x-[^+]*\+json)|[^/]*\+(json|xml)|image\/svg\+xml)$/;
+export const TEXTISH_RE = /^(text\/.*|application\/(json|xml|javascript|x-[^+]*\+json|[^/]*\+(json|xml))|[^/]*\+(json|xml)|image\/svg\+xml)$/;
 
 export function selectUploadMode(byteLength: number): 'single' | 'resumable' {
   return byteLength > UPLOAD_RESUMABLE_BYTES ? 'resumable' : 'single';

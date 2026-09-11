@@ -26,11 +26,17 @@ describe.skipIf(!hasCreds)('drive integration round-trip', () => {
     const read2 = await drive.downloadFile(uploaded.id);
     expect(read2.bytes.toString('utf8')).toBe('hello v2');
 
+    const sub = await drive.createFolder(`mcp-it-sub-${Date.now()}`, folder.id);
+    await drive.moveFile(uploaded.id, sub.id, folder.id);
+    const subListed = await drive.listFiles({ q: `'${sub.id}' in parents` });
+    expect(subListed.files.map((f) => f.id)).toContain(uploaded.id);
+
     const copied = await drive.copyFile(uploaded.id, 'hello-copy.txt', folder.id);
     await drive.trashFile(copied.id);
     await drive.trashFile(uploaded.id);
     await drive.deleteFilePermanent(copied.id);
     await drive.deleteFilePermanent(uploaded.id);
+    await drive.deleteFilePermanent(sub.id);
     await drive.deleteFilePermanent(folder.id);
   }, 120000);
 });

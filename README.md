@@ -68,7 +68,7 @@ The image builds with `npm run build`, installs production dependencies only, an
 | `drive_get` | `files.get` metadata only |
 | `drive_list` | `q: '<folder> in parents and trashed=false'`; root if no folder |
 | `drive_read` | Metadata + content; Workspace files auto-exported; binary → base64 + `isBase64:true`; past inline cap → `truncated:true, nextOffset, totalSize` |
-| `drive_export` | Explicit export; `mimeType` validated against allowed map for source type |
+| `drive_export` | Explicit export; `mimeType` validated against allowed map for source type; returns the full buffer with no truncation (large PDFs can be big) |
 | `drive_create_folder` | `files.create` with folder MIME |
 | `drive_upload` | Small = single-shot; >5MB = resumable via `TransferHelper` |
 | `drive_update` | Metadata and/or content update |
@@ -83,7 +83,7 @@ The image builds with `npm run build`, installs production dependencies only, an
 - **Single shared Drive identity.** The server acts as one Google account (the OAuth refresh token holder). All MCP clients share that identity — there is no per-user auth.
 - **Trash-by-default.** `drive_delete` moves files to trash unless called with both `permanent:true` and `confirmPermanent:true`.
 - **Ownership transfer blocked.** `drive_permissions` rejects `role:owner` unless the call explicitly passes `allowOwnershipTransfer:true`.
-- **`API_KEY` for non-localhost.** Requests from non-localhost origins must present the configured API key as a `Bearer` token; localhost is exempt for local development.
+- **`API_KEY` required when set.** When `API_KEY` is set, all `/mcp` requests require `Authorization: Bearer <key>` (no localhost exemption).
 - Secrets (client secret, refresh token, API key) never appear in tool output or error messages.
 
 ## Test

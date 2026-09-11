@@ -7,6 +7,7 @@ import { AuthProvider } from './auth.js';
 import { createDriveClient } from './services/drive.js';
 import { createSessionStore, newSessionTransport } from './transport.js';
 import { handleTool, type ServerDeps } from './tools/common.js';
+import { scrub } from './errors.js';
 import { registerReadTools } from './tools/read.js';
 import { registerWriteTools } from './tools/write.js';
 import { registerSharingTools } from './tools/sharing.js';
@@ -54,7 +55,7 @@ export function createHttpApp(makeServer: () => McpServer, config: Config): expr
       }
       await transport.handleRequest(req, res, req.body);
     } catch (err) {
-      res.status(500).json({ error: String((err as Error)?.message ?? err) });
+      res.status(500).json({ error: scrub(String((err as Error)?.message ?? err)) });
     }
   });
 

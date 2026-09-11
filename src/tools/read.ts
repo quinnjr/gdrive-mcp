@@ -29,7 +29,7 @@ export function registerReadTools(server: McpServer, deps: ServerDeps): void {
         const auto = autoExportMime(mime);
         if (!auto) return { metadata, exportRequired: true, supportedExports: allowedExportMimes(mime) };
         const { bytes } = await deps.drive.exportFile(args.fileId, auto);
-        if (TEXTISH_RE.test(auto)) return { metadata, exportedFrom: mime, exportMime: auto, text: bytes.toString('utf8') };
+        if (TEXTISH_RE.test(auto)) return { metadata, exportedFrom: mime, exportMime: auto, ...toInlinePayload(bytes, auto, args.offset, limit) };
         return { metadata, exportedFrom: mime, exportMime: auto, ...toInlinePayload(bytes, auto, 0, limit) };
       }
       const { bytes, mimeType } = await deps.drive.downloadFile(args.fileId);

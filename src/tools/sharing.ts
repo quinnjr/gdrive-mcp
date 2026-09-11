@@ -31,7 +31,7 @@ export function registerSharingTools(server: McpServer, deps: ServerDeps): void 
         throw new DriveError('INVALID_REQUEST', 'Ownership transfer blocked. Set allowOwnershipTransfer:true to transfer ownership.');
       }
       const perm = await deps.drive.createPermission(args.fileId, { role: args.role, type: args.type, emailAddress: args.emailAddress });
-      auditLog('drive_permissions', { fileId: args.fileId, action: 'create', role: args.role });
+      auditLog('drive_permissions', { fileId: args.fileId, action: 'create', role: args.role, type: args.type, emailAddress: args.emailAddress });
       return perm;
     }));
 
