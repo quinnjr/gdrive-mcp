@@ -28,10 +28,12 @@ export interface DriveClient {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function isTransient(err: unknown): boolean {
-  const code = mapDriveError(err).code;
-  if (code === 'RETRYABLE') return true;
-  const c = (err as { code?: unknown })?.code;
-  return c === 'ECONNRESET' || c === 'ETIMEDOUT';
+  const e = (err ?? {}) as { response?: { status?: unknown }; code?: unknown };
+  const status = typeof e.response?.status === 'number'
+    ? e.response.status
+    : typeof e.code === 'number' ? e.code : undefined;
+  if (isRetryableStatus(status)) return true;
+  return e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT';
 }
 
 export async function withRetry<T>(fn: () => Promise<T>, opts: { maxAttempts?: number; baseMs?: number } = {}): Promise<T> {
@@ -102,7 +104,7 @@ export function createDriveClient(auth: AuthProvider): DriveClient {
       });
     },
     async exportFile(fileId, mimeType) {
-      return run(fileId, async (d) => ({ bytes: toBuffer((await d.files.export({ fileId, mimeType })).data) }));
+      return run(fileId, async (d) => ({ bytes: toBuffer((await d.files.export({ ...SD, fileId, mimeType })).data) }));
     },
     async createFolder(name, parentId) {
       return run(undefined, async (d) => (await d.files.create({ ...SD, requestBody: { name, mimeType: FOLDER_MIME, parents: parentId ? [parentId] : undefined }, fields: DEFAULT_FILE_FIELDS })).data as DriveFile);
@@ -145,6 +147,7 @@ export function createDriveClient(auth: AuthProvider): DriveClient {
     async deletePermission(fileId, permissionId) {
       await run(fileId, async (d) => { await d.permissions.delete({ ...SD, fileId, permissionId }); });
     },
+    // drives.list takes no supportsAllDrives param (amended plan rule: files.* + permissions.* only).
     async listDrives(pageSize = 20, pageToken) {
       return run(undefined, async (d) => {
         const res = await d.drives.list({ pageSize, pageToken, fields: 'nextPageToken,drives(id,name)' });
